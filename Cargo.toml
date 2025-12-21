@@ -33,6 +33,9 @@ esp-println = { version = "0.16.1", features = ["defmt-espflash", "esp32c6"] }
 
 critical-section = "1.2.0"
 static_cell      = "2.1.1"
+ssd1306 = { version = "0.10.0", features = ["async"] }
+embedded-graphics = { version = "0.8.1", features = ["defmt"] }
+shared-bus = "0.3.1"
 
 
 [profile.dev]
