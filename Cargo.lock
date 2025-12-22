@@ -37,6 +37,12 @@ checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 
 [[package]]
 name = "bitfield"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d7e60934ceec538daadb9d8432424ed043a904d8e0243f3c6446bce549a46ac"
+
+[[package]]
+name = "bitfield"
 version = "0.19.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "21ba6517c6b0f2bf08be60e187ab64b038438f22dd755614d8fe4d4098c46419"
@@ -103,6 +109,7 @@ dependencies = [
  "embassy-time",
  "embedded-aht20",
  "embedded-graphics",
+ "ens160",
  "esp-alloc",
  "esp-backtrace",
  "esp-bootloader-esp-idf",
@@ -577,6 +584,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ens160"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7013c2e7a09855bad34020fa84821b2ffb7398d722956092e43b30feab563831"
+dependencies = [
+ "bitfield 0.14.0",
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+ "maybe-async-cfg",
+]
+
+[[package]]
 name = "enumset"
 version = "1.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -675,7 +694,7 @@ version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54786287c0a61ca0f78cb0c338a39427551d1be229103b4444591796c579e093"
 dependencies = [
- "bitfield",
+ "bitfield 0.19.4",
  "bitflags 2.10.0",
  "bytemuck",
  "cfg-if",

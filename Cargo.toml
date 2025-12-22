@@ -38,6 +38,7 @@ embedded-graphics = { version = "0.8.1", features = ["defmt"] }
 embassy-embedded-hal = { version = "0.5.0", features = ["defmt"] }
 embassy-sync = { version = "0.7.2", features = ["defmt"] }
 embedded-aht20 = { version = "0.2.0", features = ["async"] }
+ens160 = { version = "0.6.1", default-features = false, features = ["async"] }
 
 
 [profile.dev]

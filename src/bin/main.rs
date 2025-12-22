@@ -12,12 +12,13 @@ use embassy_embedded_hal::shared_bus;
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::mutex::Mutex;
-use embassy_time::{Duration, Timer};
+use embassy_time::Timer;
 use embedded_aht20::{Aht20, DEFAULT_I2C_ADDRESS};
 use embedded_graphics::mono_font::{MonoTextStyleBuilder, iso_8859_1::FONT_6X10};
 use embedded_graphics::pixelcolor::BinaryColor;
 use embedded_graphics::prelude::*;
 use embedded_graphics::text::{Baseline, Text};
+use ens160::{AirQualityIndex, Ens160};
 use esp_hal::clock::CpuClock;
 use esp_hal::i2c::master::{Config as I2cConfig, I2c};
 use esp_hal::time::Rate;
@@ -61,14 +62,21 @@ async fn main(_spawner: Spawner) -> ! {
     .into_async();
     let i2c_bus: Mutex<NoopRawMutex, _> = Mutex::new(i2c_bus);
 
-    info!("Initializing sensor...");
-    let mut sensor = Aht20::new(
+    info!("Initializing HT sensor...");
+    let mut ht_sensor = Aht20::new(
         I2cDevice::new(&i2c_bus),
         DEFAULT_I2C_ADDRESS,
         embassy_time::Delay,
     )
     .await
     .unwrap();
+
+    info!("Initializing AQ sensor...");
+    let mut aq_sensor = Ens160::new(I2cDevice::new(&i2c_bus), 0x53);
+    aq_sensor.reset().await.unwrap();
+    Timer::after_millis(250).await;
+    aq_sensor.operational().await.unwrap();
+    Timer::after_millis(50).await;
 
     info!("Initializing display...");
     let interface = I2CDisplayInterface::new(I2cDevice::new(&i2c_bus));
@@ -82,9 +90,10 @@ async fn main(_spawner: Spawner) -> ! {
         .text_color(BinaryColor::On)
         .build();
 
+    let mut show_tvoc = false;
     loop {
         info!("Measuring temp/hum...");
-        let measurement = sensor.measure().await.unwrap();
+        let measurement = ht_sensor.measure().await.unwrap();
         info!(
             "Temperature: {} °C, Relative humidity: {} %",
             measurement.temperature.celsius(),
@@ -93,9 +102,64 @@ async fn main(_spawner: Spawner) -> ! {
 
         display.clear_buffer();
 
-        Text::with_baseline("Hello, Rust!", Point::zero(), text_style, Baseline::Top)
+        if let Ok(status) = aq_sensor.status().await
+            && status.data_is_ready()
+        {
+            aq_sensor
+                .set_temp((measurement.temperature.celsius() * 100.0) as i16)
+                .await
+                .unwrap();
+            aq_sensor
+                .set_hum((measurement.relative_humidity * 100.0) as u16)
+                .await
+                .unwrap();
+
+            let tvoc = aq_sensor.tvoc().await.unwrap();
+            let eco2 = aq_sensor.eco2().await.unwrap();
+            let air_quality_index = aq_sensor.air_quality_index().await.unwrap();
+
+            Text::with_baseline(
+                &format!("Air Quality: {:?}", air_quality_index),
+                Point::zero(),
+                text_style,
+                Baseline::Top,
+            )
             .draw(&mut display)
             .unwrap();
+
+            if !show_tvoc {
+                Text::with_baseline(
+                    &format!("eCO2: {} ppm", *eco2),
+                    Point::new(0, 48),
+                    text_style,
+                    Baseline::Top,
+                )
+                .draw(&mut display)
+                .unwrap();
+
+                show_tvoc = true;
+            } else {
+                Text::with_baseline(
+                    &format!("TVOC: {} ppb", tvoc),
+                    Point::new(0, 48),
+                    text_style,
+                    Baseline::Top,
+                )
+                .draw(&mut display)
+                .unwrap();
+
+                show_tvoc = false;
+            }
+        } else {
+            Text::with_baseline(
+                "Computing Air Quality...",
+                Point::zero(),
+                text_style,
+                Baseline::Top,
+            )
+            .draw(&mut display)
+            .unwrap();
+        }
 
         Text::with_baseline(
             &format!("Temperature: {:.1} °C", measurement.temperature.celsius()),
@@ -107,17 +171,18 @@ async fn main(_spawner: Spawner) -> ! {
         .unwrap();
 
         Text::with_baseline(
-            &format!("rel. Humidity: {:.1} %", measurement.relative_humidity),
+            &format!("Rel. Humidity: {:.1} %", measurement.relative_humidity),
             Point::new(0, 32),
             text_style,
             Baseline::Top,
         )
         .draw(&mut display)
         .unwrap();
+
         info!("Flushing display...");
         display.flush().await.unwrap();
 
-        Timer::after(Duration::from_secs(5)).await;
+        Timer::after_secs(5).await;
     }
 
     // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.0.0/examples/src/bin
