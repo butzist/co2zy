@@ -39,6 +39,9 @@ embassy-embedded-hal = { version = "0.5.0", features = ["defmt"] }
 embassy-sync = { version = "0.7.2", features = ["defmt"] }
 embedded-aht20 = { version = "0.2.0", features = ["async"] }
 ens160 = { version = "0.6.1", default-features = false, features = ["async"] }
+smart-leds = "0.4.0"
+esp-hal-smartled = { version = "0.17.0", features = ["defmt", "esp32c6"] }
+palette = { version = "0.7.6", default-features = false, features = ["alloc", "approx", "libm"] }
 
 
 [profile.dev]

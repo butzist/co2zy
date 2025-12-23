@@ -21,9 +21,13 @@ use embedded_graphics::text::{Baseline, Text};
 use ens160::{AirQualityIndex, Ens160};
 use esp_hal::clock::CpuClock;
 use esp_hal::i2c::master::{Config as I2cConfig, I2c};
+use esp_hal::rmt::Rmt;
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
+use esp_hal_smartled::{SmartLedsAdapterAsync, smart_led_buffer};
+use palette::{FromColor, Hsv, Srgb};
 use shared_bus::asynch::i2c::I2cDevice;
+use smart_leds::{RGB8, SmartLedsWriteAsync};
 use ssd1306::{
     I2CDisplayInterface, Ssd1306Async, mode::DisplayConfigAsync, rotation::DisplayRotation,
     size::DisplaySize128x64,
@@ -90,6 +94,22 @@ async fn main(_spawner: Spawner) -> ! {
         .text_color(BinaryColor::On)
         .build();
 
+    let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80u32))
+        .unwrap()
+        .into_async();
+    let mut rmt_buffer = smart_led_buffer!(1);
+    let mut led = SmartLedsAdapterAsync::new(rmt.channel0, peripherals.GPIO8, &mut rmt_buffer);
+    let mut set_led = async |h: f32, s: f32, v: f32| {
+        let rgb = Srgb::from_color(Hsv::new(h, s, v));
+        let (r, g, b) = (
+            (rgb.red * 255.0) as u8,
+            (rgb.green * 255.0) as u8,
+            (rgb.blue * 255.0) as u8,
+        );
+        let data = [RGB8::new(r, g, b); 1];
+        led.write(data.iter().cloned()).await.unwrap();
+    };
+
     let mut show_tvoc = false;
     loop {
         info!("Measuring temp/hum...");
@@ -117,6 +137,15 @@ async fn main(_spawner: Spawner) -> ! {
             let tvoc = aq_sensor.tvoc().await.unwrap();
             let eco2 = aq_sensor.eco2().await.unwrap();
             let air_quality_index = aq_sensor.air_quality_index().await.unwrap();
+
+            let hue = match air_quality_index {
+                AirQualityIndex::Excellent => 120.0,
+                AirQualityIndex::Good => 90.0,
+                AirQualityIndex::Moderate => 45.0,
+                AirQualityIndex::Poor => 15.0,
+                AirQualityIndex::Unhealthy => 0.0,
+            };
+            set_led(hue, 1.0, 0.7).await;
 
             Text::with_baseline(
                 &format!("Air Quality: {:?}", air_quality_index),
