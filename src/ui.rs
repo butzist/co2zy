@@ -1,6 +1,7 @@
 extern crate alloc;
 use crate::measurement::Measurement;
 use alloc::format;
+use defmt::Format;
 use embedded_graphics::mono_font::{MonoTextStyle, MonoTextStyleBuilder, iso_8859_1::FONT_6X10};
 use embedded_graphics::pixelcolor::BinaryColor;
 use embedded_graphics::prelude::*;
@@ -10,6 +11,13 @@ use ssd1306::{
     I2CDisplayInterface, Ssd1306Async, mode::DisplayConfigAsync, rotation::DisplayRotation,
     size::DisplaySize128x64,
 };
+
+#[derive(Format)]
+pub enum Error {
+    DisplayInit,
+    Draw,
+    Flush,
+}
 
 pub struct Ui<I2C>
 where
@@ -28,12 +36,12 @@ impl<I2C> Ui<I2C>
 where
     I2C: I2c,
 {
-    pub async fn new(i2c: I2C) -> Result<Self, ()> {
+    pub async fn new(i2c: I2C) -> Result<Self, Error> {
         let interface = I2CDisplayInterface::new(i2c);
         let mut display = Ssd1306Async::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
             .into_buffered_graphics_mode();
 
-        display.init().await.unwrap();
+        display.init().await.map_err(|_| Error::DisplayInit)?;
 
         let text_style = MonoTextStyleBuilder::new()
             .font(&FONT_6X10)
@@ -47,15 +55,15 @@ where
         })
     }
 
-    fn write_line(&mut self, line_num: i32, text: &str) -> Result<(), ()> {
+    fn write_line(&mut self, line_num: i32, text: &str) -> Result<(), Error> {
         let y = line_num * 16;
         Text::with_baseline(text, Point::new(0, y), self.text_style, Baseline::Top)
             .draw(&mut self.display)
-            .unwrap();
+            .map_err(|_| Error::Draw)?;
         Ok(())
     }
 
-    pub async fn render(&mut self, measurement: &Measurement) -> Result<(), ()> {
+    pub async fn render(&mut self, measurement: &Measurement) -> Result<(), Error> {
         self.display.clear_buffer();
 
         if let Some(ref air_data) = measurement.air_quality {
@@ -84,7 +92,7 @@ where
             ),
         )?;
 
-        self.display.flush().await.unwrap();
+        self.display.flush().await.map_err(|_| Error::Flush)?;
         Ok(())
     }
 }

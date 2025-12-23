@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![feature(try_blocks)]
 #![deny(
     clippy::mem_forget,
     reason = "mem::forget is generally not safe to do with esp_hal types, especially those \
@@ -7,7 +8,7 @@
 )]
 
 use co2zy::{led::Led, sensor::Sensor, ui::Ui};
-use defmt::info;
+use defmt::{error, info, warn};
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
@@ -41,40 +42,49 @@ async fn main(_spawner: Spawner) -> ! {
 
     info!("Embassy initialized!");
 
-    let i2c_bus = I2c::new(
-        peripherals.I2C0,
-        I2cConfig::default().with_frequency(Rate::from_khz(400)),
-    )
-    .unwrap()
-    .with_scl(peripherals.GPIO18)
-    .with_sda(peripherals.GPIO19)
-    .into_async();
+    let i2c_bus = try {
+        I2c::new(
+            peripherals.I2C0,
+            I2cConfig::default().with_frequency(Rate::from_khz(400)),
+        )?
+        .with_scl(peripherals.GPIO18)
+        .with_sda(peripherals.GPIO19)
+        .into_async()
+    }
+    .unwrap_or_else(|e| defmt::panic!("Failed to initialize I2C bus: {}", e));
+
     let i2c_bus = Mutex::<NoopRawMutex, _>::new(i2c_bus);
 
     info!("Initializing sensors...");
     let mut sensor = Sensor::new(I2cDevice::new(&i2c_bus), I2cDevice::new(&i2c_bus))
         .await
-        .unwrap();
+        .unwrap_or_else(|e| defmt::panic!("Failed to initialize sensors: {}", e));
 
     info!("Initializing UI...");
-    let mut ui = Ui::new(I2cDevice::new(&i2c_bus)).await.unwrap();
+    let mut ui = Ui::new(I2cDevice::new(&i2c_bus))
+        .await
+        .unwrap_or_else(|e| defmt::panic!("Failed to initialize UI: {}", e));
 
     info!("Initializing LED...");
-    let mut led = Led::new(peripherals.RMT, peripherals.GPIO8.into());
+    let mut led = Led::new(peripherals.RMT, peripherals.GPIO8.into())
+        .unwrap_or_else(|e| defmt::panic!("Failed to initialize LED: {}", e));
 
     loop {
-        info!("Measuring sensors...");
-        let measurement = sensor.measure().await.unwrap();
-        info!(
-            "Temperature: {} °C, Relative humidity: {} %",
-            measurement.temperature_celsius, measurement.relative_humidity_percent
-        );
+        let measurement = match sensor.measure().await {
+            Ok(m) => m,
+            Err(e) => {
+                warn!("Failed to measure sensors: {}", e);
+                Timer::after_secs(5).await;
+                continue;
+            }
+        };
 
         let color = measurement.get_air_quality_color();
         led.set_color(color, 1.0, 0.7).await;
 
-        info!("Rendering UI...");
-        ui.render(&measurement).await.unwrap();
+        ui.render(&measurement)
+            .await
+            .unwrap_or_else(|e| warn!("Failed to render UI: {}", e));
 
         Timer::after_secs(5).await;
     }

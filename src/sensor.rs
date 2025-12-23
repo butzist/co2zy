@@ -6,6 +6,22 @@ use embedded_hal_async::i2c::I2c;
 use ens160::{Ens160, Status as Ens160Status};
 
 use crate::measurement::{AirQualityData, Measurement};
+use defmt::Format;
+
+#[derive(Format)]
+pub enum Error {
+    ThSensorInit,
+    ThSensorMeasure,
+    AqSensorReset,
+    AqSensorOperational,
+    AqSensorSetTemp,
+    AqSensorSetHum,
+    AqSensorTvoc,
+    AqSensorEco2,
+    AqSensorAqi,
+    AqSensorStatus,
+}
+
 pub struct Sensor<I2C>
 where
     I2C: I2c,
@@ -18,15 +34,18 @@ impl<I2C> Sensor<I2C>
 where
     I2C: I2c,
 {
-    pub async fn new(i2c_th: I2C, i2c_aq: I2C) -> Result<Self, ()> {
+    pub async fn new(i2c_th: I2C, i2c_aq: I2C) -> Result<Self, Error> {
         let th_sensor = Aht20::new(i2c_th, DEFAULT_I2C_ADDRESS, Delay)
             .await
-            .unwrap();
+            .map_err(|_| Error::ThSensorInit)?;
 
         let mut aq_sensor = Ens160::new(i2c_aq, 0x53);
-        aq_sensor.reset().await.unwrap();
+        aq_sensor.reset().await.map_err(|_| Error::AqSensorReset)?;
         embassy_time::Timer::after_millis(250).await;
-        aq_sensor.operational().await.unwrap();
+        aq_sensor
+            .operational()
+            .await
+            .map_err(|_| Error::AqSensorOperational)?;
         embassy_time::Timer::after_millis(50).await;
 
         Ok(Self {
@@ -35,36 +54,54 @@ where
         })
     }
 
-    pub async fn measure(&mut self) -> Result<Measurement, ()> {
-        let th_measurement = self.th_sensor.measure().await.unwrap();
+    pub async fn measure(&mut self) -> Result<Measurement, Error> {
+        let th_measurement = self
+            .th_sensor
+            .measure()
+            .await
+            .map_err(|_| Error::ThSensorMeasure)?;
 
         let temperature_celsius = th_measurement.temperature.celsius();
         let relative_humidity_percent = th_measurement.relative_humidity;
 
-        let air_quality = if let Ok(status) = self.aq_sensor.status().await {
-            let ens160_status: Ens160Status = status;
-            if ens160_status.data_is_ready() {
-                self.aq_sensor
-                    .set_temp((temperature_celsius * 100.0) as i16)
-                    .await
-                    .unwrap();
-                self.aq_sensor
-                    .set_hum((relative_humidity_percent * 100.0) as u16)
-                    .await
-                    .unwrap();
+        let status = self
+            .aq_sensor
+            .status()
+            .await
+            .map_err(|_| Error::AqSensorStatus)?;
+        let ens160_status: Ens160Status = status;
 
-                let tvoc_ppb = self.aq_sensor.tvoc().await.unwrap();
-                let eco2_ppm = self.aq_sensor.eco2().await.unwrap();
-                let air_quality_index = self.aq_sensor.air_quality_index().await.unwrap();
+        let air_quality = if ens160_status.data_is_ready() {
+            self.aq_sensor
+                .set_temp((temperature_celsius * 100.0) as i16)
+                .await
+                .map_err(|_| Error::AqSensorSetTemp)?;
+            self.aq_sensor
+                .set_hum((relative_humidity_percent * 100.0) as u16)
+                .await
+                .map_err(|_| Error::AqSensorSetHum)?;
 
-                Some(AirQualityData {
-                    air_quality_index,
-                    eco2_ppm: *eco2_ppm,
-                    tvoc_ppb,
-                })
-            } else {
-                None
-            }
+            let tvoc_ppb = self
+                .aq_sensor
+                .tvoc()
+                .await
+                .map_err(|_| Error::AqSensorTvoc)?;
+            let eco2_ppm = self
+                .aq_sensor
+                .eco2()
+                .await
+                .map_err(|_| Error::AqSensorEco2)?;
+            let air_quality_index = self
+                .aq_sensor
+                .air_quality_index()
+                .await
+                .map_err(|_| Error::AqSensorAqi)?;
+
+            Some(AirQualityData {
+                air_quality_index,
+                eco2_ppm: *eco2_ppm,
+                tvoc_ppb,
+            })
         } else {
             None
         };
