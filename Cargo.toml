@@ -32,7 +32,7 @@ esp-backtrace = { version = "0.18.1", features = [
 esp-println = { version = "0.16.1", features = ["defmt-espflash", "esp32c6"] }
 
 critical-section = "1.2.0"
-static_cell = "2.1.1"
+static_cell = { version = "2.1.1", features = ["nightly"] }
 ssd1306 = { version = "0.10.0", features = ["async"] }
 embedded-graphics = { version = "0.8.1", features = ["defmt"] }
 embassy-embedded-hal = { version = "0.5.0", features = ["defmt"] }
@@ -42,6 +42,8 @@ ens160 = { version = "0.6.1", default-features = false, features = ["async"] }
 smart-leds = "0.4.0"
 esp-hal-smartled = { version = "0.17.0", features = ["defmt", "esp32c6"] }
 palette = { version = "0.7.6", default-features = false, features = ["alloc", "approx", "libm"] }
+embedded-hal-async = "1.0.0"
+display-interface-i2c = "0.5.0"
 
 
 [profile.dev]
