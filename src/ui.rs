@@ -7,6 +7,7 @@ use embedded_graphics::pixelcolor::BinaryColor;
 use embedded_graphics::prelude::*;
 use embedded_graphics::text::{Baseline, Text};
 use embedded_hal_async::i2c::I2c;
+use ens160::Validity;
 use ssd1306::{
     I2CDisplayInterface, Ssd1306Async, mode::DisplayConfigAsync, rotation::DisplayRotation,
     size::DisplaySize128x64,
@@ -66,7 +67,13 @@ where
     pub async fn render(&mut self, measurement: &Measurement) -> Result<(), Error> {
         self.display.clear_buffer();
 
-        if let Some(ref air_data) = measurement.air_quality {
+        if !matches!(measurement.air_quality_validity, Validity::NormalOperation) {
+            self.write_line(0, "Measuring Air Quality...")?;
+            self.write_line(
+                3,
+                &format!("AQ Status: {:?}", measurement.air_quality_validity),
+            )?;
+        } else if let Some(ref air_data) = measurement.air_quality {
             self.write_line(0, &format!("Air Quality: {:?}", air_data.air_quality_index))?;
 
             if !self.show_tvoc {
@@ -77,7 +84,7 @@ where
                 self.show_tvoc = false;
             }
         } else {
-            self.write_line(0, "Computing Air Quality...")?;
+            self.write_line(0, "Air Quality Unavailable")?;
         }
 
         self.write_line(

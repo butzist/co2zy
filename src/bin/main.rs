@@ -8,7 +8,7 @@
 )]
 
 use co2zy::{led::Led, sensor::Sensor, ui::Ui};
-use defmt::{error, info, warn};
+use defmt::{info, warn};
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;

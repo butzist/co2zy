@@ -3,10 +3,10 @@ use embassy_time::Delay;
 use embedded_aht20::{Aht20, DEFAULT_I2C_ADDRESS};
 use embedded_hal_async::i2c::I2c;
 
-use ens160::{Ens160, Status as Ens160Status};
+use ens160::Ens160;
 
 use crate::measurement::{AirQualityData, Measurement};
-use defmt::Format;
+use defmt::{Format, error};
 
 #[derive(Format)]
 pub enum Error {
@@ -46,7 +46,6 @@ where
             .operational()
             .await
             .map_err(|_| Error::AqSensorOperational)?;
-        embassy_time::Timer::after_millis(50).await;
 
         Ok(Self {
             th_sensor,
@@ -63,24 +62,31 @@ where
 
         let temperature_celsius = th_measurement.temperature.celsius();
         let relative_humidity_percent = th_measurement.relative_humidity;
+        self.aq_sensor
+            .set_temp((temperature_celsius * 100.0) as i16)
+            .await
+            .map_err(|_| Error::AqSensorSetTemp)?;
+        self.aq_sensor
+            .set_hum((relative_humidity_percent * 100.0) as u16)
+            .await
+            .map_err(|_| Error::AqSensorSetHum)?;
 
-        let status = self
+        let ens160_status = self
             .aq_sensor
             .status()
             .await
             .map_err(|_| Error::AqSensorStatus)?;
-        let ens160_status: Ens160Status = status;
 
+        if ens160_status.error() {
+            error!("ENS160 error status!");
+        }
+
+        if !ens160_status.running_normally() {
+            error!("ENS160 not running",);
+        }
+
+        let air_quality_validity = ens160_status.validity_flag();
         let air_quality = if ens160_status.data_is_ready() {
-            self.aq_sensor
-                .set_temp((temperature_celsius * 100.0) as i16)
-                .await
-                .map_err(|_| Error::AqSensorSetTemp)?;
-            self.aq_sensor
-                .set_hum((relative_humidity_percent * 100.0) as u16)
-                .await
-                .map_err(|_| Error::AqSensorSetHum)?;
-
             let tvoc_ppb = self
                 .aq_sensor
                 .tvoc()
@@ -103,12 +109,14 @@ where
                 tvoc_ppb,
             })
         } else {
+            error!("ENS160 data not ready!");
             None
         };
 
         Ok(Measurement {
             temperature_celsius,
             relative_humidity_percent,
+            air_quality_validity,
             air_quality,
         })
     }

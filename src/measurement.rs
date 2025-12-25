@@ -1,5 +1,5 @@
 extern crate alloc;
-use ens160::AirQualityIndex;
+use ens160::{AirQualityIndex, Validity};
 
 pub struct AirQualityData {
     pub air_quality_index: AirQualityIndex,
@@ -10,11 +10,19 @@ pub struct AirQualityData {
 pub struct Measurement {
     pub temperature_celsius: f32,
     pub relative_humidity_percent: f32,
+    pub air_quality_validity: Validity,
     pub air_quality: Option<AirQualityData>,
 }
 
 impl Measurement {
     pub fn get_air_quality_color(&self) -> f32 {
+        match self.air_quality_validity {
+            Validity::NormalOperation => {
+                // continue
+            }
+            _ => return 180.0, // Blue/cyan while in warmup
+        };
+
         match self.air_quality {
             Some(ref air_data) => match air_data.air_quality_index {
                 AirQualityIndex::Excellent => 120.0,
