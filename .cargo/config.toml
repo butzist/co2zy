@@ -1,18 +1,13 @@
-[target.riscv32imac-unknown-none-elf]
-runner = "espflash flash --monitor --chip esp32c6 --log-format defmt"
+[target.xtensa-esp32s2-none-elf]
+runner = "espflash flash --monitor --chip esp32s2 --no-stub --log-format defmt"
 
 [env]
 DEFMT_LOG="info"
 
 [build]
-rustflags = [
-  # Required to obtain backtraces (e.g. when using the "esp-backtrace" crate.)
-  # NOTE: May negatively impact performance of produced code
-  "-C", "force-frame-pointers",
-  "-Z", "stack-protector=all",
-]
+rustflags = ["-C", "link-arg=-nostartfiles"]
 
-target = "riscv32imac-unknown-none-elf"
+target = "xtensa-esp32s2-none-elf"
 
 [unstable]
 build-std = ["alloc", "core"]

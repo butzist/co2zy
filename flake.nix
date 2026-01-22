@@ -18,12 +18,6 @@
       system: let
         overlays = [(import rust-overlay)];
         pkgs = import nixpkgs {inherit system overlays;};
-
-        # Use the latest nightly toolchain from rust-overlay
-        rustNightly = pkgs.rust-bin.nightly.latest.default.override {
-          extensions = ["rust-src"];
-          targets = ["riscv32imac-unknown-none-elf"];
-        };
       in {
         packages = {
           default = pkgs.hello;
@@ -33,7 +27,6 @@
           name = "dev-shell-esp-nightly";
 
           buildInputs = [
-            rustNightly
             pkgs.espup
             pkgs.espflash
             pkgs.esp-generate
@@ -42,20 +35,6 @@
             pkgs.lld
             pkgs.llvm
           ];
-
-          shellHook = ''
-            echo "🦀 Entered dev shell with nightly Rust"
-            flake_root=$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")
-
-
-            # Use rustup shims
-            export PATH=${pkgs.rustup}/bin:$PATH
-            export RUSTUP_HOME="$flake_root/.rustup"
-
-            # Setup nix-installed toolchain in rustup
-            rustup toolchain link nix-nightly ${rustNightly}
-            rustup default nix-nightly
-          '';
         };
       }
     );
